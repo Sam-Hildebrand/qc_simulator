@@ -1,24 +1,32 @@
-#include "computer.cpp"
+#include "qc.hpp"
 #include <iostream>
 
 int main() {
-    int num_runs = 10000;
+    int num_runs = 1000;
 
-    qubit q1;
-    qubit q2;
+    qubit q_alice("alice");
+    qubit q_bob("bob");
 
-    circuit c1({H});
-    circuit c2({X, H});
+    circuit c({&q_alice, &q_bob});
 
-    c1.apply_to(q1);
-    std::cout  << "Qubit state after applying " << c1.print_circuit() << ": " << print_amplitudes(q1) << std::endl;
-    q1.reset();
-    std::cout << "Probability of 1 after "<< num_runs << " runs: " << simulate_probability(10000, c1, q1) * 100.0 << "%" << std::endl;
+    //c.X(q_alice);
+    c.H(q_alice);
 
-    c2.apply_to(q2);
-    std::cout  << "\nQubit state after applying " << c2.print_circuit() << ": " << print_amplitudes(q2) << std::endl;
-    q2.reset();
-    std::cout << "Probability of 1 after "<< num_runs << " runs: " << simulate_probability(10000, c2, q2) * 100.0 << "%" << std::endl;
+    c.CNOT(q_alice, q_bob);
+
+    std::cout << "Circuit after applying gates:\n";
+    std::cout << c.print_circuit(); 
+
+    std::cout << "\nAmplitudes:\n";
+    std::cout << c.print_amplitudes(2) << "\n";
+
+    quantum_computer qc(c);
+
+    std::cout << "\nProbabilistic Values:\n";
+    std::cout << qc.print_prob_dist(qc.calculate_probabilities(), 2) << "\n";
+
+    std::cout << "\nSimulation Results (" << num_runs << " runs):\n";
+    std::cout << qc.print_prob_dist(qc.simulate(num_runs), 2) << "\n";
 
     return 0;
 }
