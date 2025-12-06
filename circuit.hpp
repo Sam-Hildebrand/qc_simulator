@@ -69,6 +69,18 @@ class circuit {
     private:
         std::vector<qubit*> qubits;
         std::string circuit_name;
+
+        // Ensures a given qubit belongs to this circuit.
+        // Throws runtime_error if not.
+        void validate_qubit_in_circuit(const qubit& q) const {
+            for (auto* qp : qubits) {
+                if (qp == &q) return;
+            }
+            throw std::runtime_error(
+                "Error: Qubit \"" + q.name + "\" is not part of circuit \"" + circuit_name + "\"."
+            );
+        }
+
         
         // --- Private Math Helpers (Decoupled from Visuals) ---
         
@@ -155,25 +167,31 @@ class circuit {
         // --- Gate Operations (Visuals + Math) ---
 
         void I(qubit& q) {
+            validate_qubit_in_circuit(q);
             q.addGate(gate::I);
         }
         
         void H(qubit& q) {
+            validate_qubit_in_circuit(q);
             math_H(q.index);
             q.addGate(gate::H);
         }
         
         void X(qubit& q) {
+            validate_qubit_in_circuit(q);
             math_X(q.index);
             q.addGate(gate::X);
         }
         
         void Z(qubit& q) {
+            validate_qubit_in_circuit(q);
             math_Z(q.index);
             q.addGate(gate::Z);
         }
         
         void CNOT(qubit& control, qubit& target) {
+            validate_qubit_in_circuit(control);
+            validate_qubit_in_circuit(target);
             math_CNOT(control.index, target.index);
             
             // Visual Alignment Logic
@@ -338,18 +356,25 @@ class circuit {
                     }
                 }
 
-                // Check for CNOTs
-                int cnot_min = -1;
-                int cnot_max = -1;
+                // --- NEW: Detect multiple distinct CNOT pairs in this column ---
+                std::vector<int> cnot_indices;
                 for (size_t i = 0; i < num_qubits; ++i) {
                     if (col < qubits[i]->gateCount) {
                         gate g = qubits[i]->getGate(col);
                         if (g == gate::Control || g == gate::Target) {
-                            if (cnot_min == -1) cnot_min = i;
-                            cnot_max = i;
+                            cnot_indices.push_back((int)i);
                         }
                     }
                 }
+                // Pair adjacent indices into disjoint spans: (indices[0], indices[1]), (indices[2], indices[3]), ...
+                std::vector<std::pair<int,int>> cnot_pairs;
+                for (size_t k = 0; k + 1 < cnot_indices.size(); k += 2) {
+                    int a = cnot_indices[k];
+                    int b = cnot_indices[k + 1];
+                    if (a > b) std::swap(a, b);
+                    cnot_pairs.emplace_back(a, b);
+                }
+                // If cnot_indices.size() is odd, the last one is ignored (malformed column), which is safer than connecting everything.
 
                 // Step 4b: Calculate Column Width
                 size_t col_width = 3; 
@@ -366,45 +391,53 @@ class circuit {
                     bool is_qubit_line = (row % 2 == 0);
                     size_t qubit_idx = row / 2;
 
-                // --- SubCircuit Box Logic ---
-                if (has_subcircuit && qubit_idx >= (size_t)sub_start_idx && qubit_idx <= (size_t)sub_end_idx) {
+                    // --- SubCircuit Box Logic ---
+                    if (has_subcircuit && qubit_idx >= (size_t)sub_start_idx && qubit_idx <= (size_t)sub_end_idx) {
 
-                    // FIX: Prepend missing dashes when subcircuit is at column 0
-                    if (col == 0) {
-                        if (is_qubit_line) {
-                            lines[row] += "-";
-                        } else {
-                            lines[row] += " ";
+                        // FIX: Prepend missing dash when subcircuit is at column 0 (keeps single-character alignment from your previous change)
+                        if (col == 0) {
+                            if (is_qubit_line) {
+                                lines[row] += "-";
+                            } else {
+                                lines[row] += " ";
+                            }
                         }
-                    }
 
-                    if (row == (size_t)canvas_sub_start) {
-                        std::string border(col_width - 2, '-');
-                        lines[row] += "+" + border + "+";
-                    }
-                    else if (row == (size_t)canvas_sub_end && canvas_sub_start != canvas_sub_end) {
-                        std::string border(col_width - 2, '-');
-                        lines[row] += "+" + border + "+";
-                    }
-                    else if (row == (size_t)canvas_center) {
-                        size_t padding = col_width - 2 - sub_name.length();
-                        size_t left_pad = padding / 2;
-                        size_t right_pad = padding - left_pad;
-                        lines[row] += "|" + std::string(left_pad, ' ') + sub_name + std::string(right_pad, ' ') + "|";
-                    }
-                    else if (row <= (size_t)sub_end_idx + (sub_end_idx - sub_start_idx)) {
-                        lines[row] += "|" + std::string(col_width - 2, ' ') + "|";
-                    }
+                        if (row == (size_t)canvas_sub_start) {
+                            std::string border(col_width - 2, '-');
+                            lines[row] += "+" + border + "+";
+                        }
+                        else if (row == (size_t)canvas_sub_end && canvas_sub_start != canvas_sub_end) {
+                            std::string border(col_width - 2, '-');
+                            lines[row] += "+" + border + "+";
+                        }
+                        else if (row == (size_t)canvas_center) {
+                            size_t padding = col_width - 2 - sub_name.length();
+                            size_t left_pad = padding / 2;
+                            size_t right_pad = padding - left_pad;
+                            lines[row] += "|" + std::string(left_pad, ' ') + sub_name + std::string(right_pad, ' ') + "|";
+                        }
+                        else if (row <= (size_t)sub_end_idx + (sub_end_idx - sub_start_idx)) {
+                            lines[row] += "|" + std::string(col_width - 2, ' ') + "|";
+                        }
 
-                    continue;
-                }
+                        continue;
+                    }
 
                     // --- Standard Gate / Spacer Logic ---
                     std::string segment = "";
                     
                     if (is_qubit_line) {
                         gate g = (col < qubits[qubit_idx]->gateCount) ? qubits[qubit_idx]->getGate(col) : gate::I;
-                        bool is_crossing_cnot = (cnot_min != -1 && (int)qubit_idx > cnot_min && (int)qubit_idx < cnot_max);
+
+                        // Determine if this qubit is inside any CNOT span (exclusive); if so, crossing symbol used for I
+                        bool is_crossing_cnot = false;
+                        for (const auto &p : cnot_pairs) {
+                            if ((int)qubit_idx > p.first && (int)qubit_idx < p.second) {
+                                is_crossing_cnot = true;
+                                break;
+                            }
+                        }
 
                         std::string symbol = "--";
                         if (g == gate::H) symbol = "-H";
@@ -429,7 +462,15 @@ class circuit {
                         // Spacer line
                         size_t upper_q = qubit_idx;
                         size_t lower_q = qubit_idx + 1;
-                        bool in_cnot_path = (cnot_min != -1) && ((int)upper_q >= cnot_min) && ((int)lower_q <= cnot_max);
+                        bool in_cnot_path = false;
+
+                        // Only draw a vertical pipe if this spacer lies within any paired CNOT span
+                        for (const auto &p : cnot_pairs) {
+                            if ((int)upper_q >= p.first && (int)lower_q <= p.second) {
+                                in_cnot_path = true;
+                                break;
+                            }
+                        }
 
                         if (in_cnot_path) segment = " | ";
                         else segment = "   ";

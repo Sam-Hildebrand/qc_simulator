@@ -4,29 +4,30 @@
 int main() {
     int num_runs = 1000;
 
-    qubit q0, q1, q2, q3;
+    qubit qA, qB, qC, qD;
 
-    circuit c_bell({&q0, &q1, &q2, &q3}, "Bell");
+    circuit c_4bell({&qA, &qB, &qC, &qD}, "4 Qubit Bell");
 
-    // Entangling Alice and Bob's qubits
-    c_bell.H(q0);
-    c_bell.CNOT(q0, q1);
+    c_4bell.H(qA);
+    c_4bell.CNOT(qA, qB);
 
-    std::cout << "Bell circuit:\n";
-    std::cout << c_bell.print_circuit(); 
+    c_4bell.H(qC);
+    c_4bell.CNOT(qC, qD);
 
-    qubit q_alice("alice");
-    qubit q_bob("bob");
-    qubit q4;
-    qubit q5;
-    qubit q6;
-    qubit q7;
+    c_4bell.CNOT(qA, qC);
 
-    circuit c({&q_alice, &q_bob, &q4, &q5, &q6, &q7}, "Quantum Teleportation");
+    std::cout << "\n4 Qubit Bell circuit:\n";
+    std::cout << c_4bell.print_circuit(); 
 
-    c.CNOT(q6, q7);
+    qubit q0;
+    qubit q1;
+    qubit q2;
+    qubit q3;
 
-    c.apply_circuit(c_bell, {&q_alice, &q_bob, &q4, &q5});
+    circuit c({&q0, &q1, &q2, &q3}, "4-Qubit Bell test Circuit");
+
+
+    c.apply_circuit(c_4bell, {&q0, &q1, &q2, &q3});
 
     std::cout << "\nCircuit after applying gates:\n";
     std::cout << c.print_circuit(); 
