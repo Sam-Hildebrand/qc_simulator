@@ -9,9 +9,8 @@ int main() {
 
     circuit c({&q_alice, &q_bob});
 
-    //c.X(q_alice);
+    // Entangling Alice and Bob's qubits
     c.H(q_alice);
-
     c.CNOT(q_alice, q_bob);
 
     std::cout << "Circuit after applying gates:\n";
